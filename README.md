@@ -19,6 +19,7 @@ Control your system mouse using only your hand and a webcam. Powered by **MediaP
 - **Adaptive pinch threshold** — pinch distance scales with palm size for reliable detection at any distance from the camera
 - **Kalman filter** smoothing for stable, jitter-free cursor movement
 - **On-screen HUD** showing the currently detected gesture in real time
+- **Always-on-top preview window** pinned to the top-left corner of the screen so it never gets buried under other windows
 - Supports up to **2 hands** detected simultaneously
 - Configurable click and scroll delays to prevent accidental inputs
 - Mirrored webcam feed for intuitive control
