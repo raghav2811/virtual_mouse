@@ -6,19 +6,21 @@ Control your system mouse using only your hand and a webcam. Powered by **MediaP
 
 ## Features
 
-| Gesture | Action |
-|---|---|
-| Index finger up (only) | Move cursor |
-| Index finger curled/bent down | Left click |
-| Thumb pinches index finger | Drag (cursor moves while pinching) |
-| Thumb pinches middle finger | Double click |
-| Thumb pinches ring finger | Right click |
-| Index + middle fingers up, move up | Scroll up |
-| Index + middle fingers up, move down | Scroll down |
-| Closed fist | Pause tracking |
+| Gesture | Hand Shape | Action |
+|---|---|---|
+| Pointer | Thumb + index finger extended, all others curled | Move cursor |
+| Pinch drag | Thumb tip touches index fingertip | Drag — holds for 1 s then locks mouse button down |
+| Thumb → pinky | Thumb tip touches pinky fingertip | Left click |
+| Thumb → middle | Thumb tip touches middle fingertip | Double click |
+| Thumb → ring | Thumb tip touches ring fingertip | Right click |
+| Thumb scroll ↑ | Only thumb extended, move thumb upward | Scroll up |
+| Thumb scroll ↓ | Only thumb extended, move thumb downward | Scroll down |
+| Closed fist | All fingers curled | Pause / resume tracking |
 
 - **Virtual trackpad zone** — green rectangle on screen bounds the active control area, mimicking a physical trackpad
 - **Adaptive pinch threshold** — pinch distance scales with palm size for reliable detection at any distance from the camera
+- **Drag intent delay** — pinch must be held for **1 second** before drag activates, preventing accidental drags
+- **Thumb-based scroll mode** — raise only the thumb and move it up or down to scroll; a 15 px delta threshold filters noise
 - **Kalman filter** smoothing for stable, jitter-free cursor movement
 - **On-screen HUD** showing the currently detected gesture in real time
 - **Always-on-top preview window** pinned to the top-left corner of the screen so it never gets buried under other windows
@@ -83,12 +85,13 @@ hand mouse/
 ## How It Works
 
 1. **Hand detection** — `HandTracker` feeds each frame into MediaPipe Hands, which returns 21 3-D landmarks per hand.
-2. **Gesture recognition** — `GestureEngine.analyze()` reads finger states and adaptive pinch distances (scaled to palm size) to classify gestures. Scroll direction (`scroll_up` / `scroll_down`) is determined by tracking index-finger vertical delta inside the engine.
-3. **Virtual trackpad** — Only index-finger positions inside the green rectangle are mapped to screen coordinates, providing a stable bounded control area. The cursor continues to move while dragging (pinch).
-4. **Left click via index bend** — Curling the index finger so its tip drops below its PIP joint triggers a left click, keeping pinch exclusively for drag.
-5. **Cursor smoothing** — Raw mapped coordinates are fed into a Kalman filter (`CursorFilter`) to remove jitter before moving the cursor.
-6. **Mouse actions** — `MouseController` translates gestures into PyAutoGUI calls (move, left-click, right-click, double-click, scroll, drag).
-7. **HUD** — `draw_hud()` renders the active gesture name on the frame so you can verify detection at a glance.
+2. **Gesture recognition** — `GestureEngine.analyze()` reads finger states (extended vs. curled) and adaptive pinch distances (scaled to palm size) to classify gestures. Each click type uses a distinct pinch pair: index for drag, middle for double-click, ring for right-click, pinky for left-click.
+3. **Scroll mode** — When only the thumb is extended, the engine enters scroll mode and anchors the thumb's Y position. Moving the thumb more than 15 px from that anchor fires `scroll_up` or `scroll_down`.
+4. **Virtual trackpad** — Only index-fingertip positions inside the green rectangle are mapped to screen coordinates, providing a stable bounded control area. The cursor continues to move while dragging (pinch).
+5. **Drag intent delay** — When a pinch is detected, `MouseController` starts a 1-second timer. The mouse button is only held down after that delay elapses, making drag intentional rather than accidental.
+6. **Cursor smoothing** — Raw mapped coordinates are fed into a Kalman filter (`CursorFilter`) to remove jitter before moving the cursor.
+7. **Mouse actions** — `MouseController` translates gestures into PyAutoGUI calls (move, left-click, right-click, double-click, scroll, drag).
+8. **HUD** — `draw_hud()` renders the active gesture name on the frame so you can verify detection at a glance.
 
 ---
 
@@ -102,5 +105,5 @@ All tuneable constants live in `config.py`:
 | `TRACKPAD_MARGIN` | `120` px | Inset of the virtual trackpad zone from frame edges |
 | `CLICK_DELAY` | `0.35` s | Minimum time between consecutive clicks |
 | `SCROLL_DELAY` | `0.08` s | Minimum time between scroll events |
-| `SCROLL_THRESHOLD` | `20` px | Minimum hand movement to trigger a scroll |
-| `SCROLL_MULTIPLIER` | `0.4` | Scroll speed multiplier |
+| `SCROLL_THRESHOLD` | `20` px | Reserved scroll delta threshold constant |
+| `SCROLL_MULTIPLIER` | `0.4` | Reserved scroll speed multiplier constant |
