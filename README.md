@@ -16,6 +16,7 @@ Control your mouse cursor using only your hand and a webcam. Powered by **MediaP
 | Index finger pushed forward (z-axis) | Depth click |
 | Closed fist | Pause tracking |
 
+- **Virtual trackpad zone** — only hand movements inside the green rectangle on-screen control the cursor, mimicking a physical trackpad
 - **Kalman filter** smoothing for stable, jitter-free cursor movement
 - Configurable click delay to prevent accidental rapid clicks
 - Mirrored webcam feed for intuitive control
@@ -60,9 +61,10 @@ python virtual_mouse.py
 
 1. **Hand detection** — MediaPipe Hands detects 21 hand landmarks in each webcam frame.
 2. **Finger state** — Fingertip positions relative to their knuckles determine which fingers are raised.
-3. **Cursor movement** — The index fingertip coordinates are mapped from the camera frame resolution to screen resolution and smoothed with a Kalman filter before moving the cursor.
-4. **Gesture recognition** — Distances between the thumb tip and other fingertips trigger click/drag actions. Two-finger detection triggers scrolling.
-5. **Depth click** — A sudden forward movement of the index finger (decrease in z-depth) triggers a click without a pinch gesture.
+3. **Virtual trackpad** — A rectangular active zone (inset by `trackpad_margin` pixels on each side) is drawn on the feed. Hand movements outside this zone are ignored, providing a stable, bounded control area.
+4. **Cursor movement** — The index fingertip coordinates are mapped from the trackpad zone to screen resolution and smoothed with a Kalman filter before moving the cursor.
+5. **Gesture recognition** — Distances between the thumb tip and other fingertips trigger click/drag actions. Two-finger detection triggers scrolling.
+6. **Depth click** — A sudden forward movement of the index finger (decrease in z-depth) triggers a click without a pinch gesture.
 
 ---
 
@@ -73,6 +75,7 @@ These variables near the top of `virtual_mouse.py` can be tuned:
 | Variable | Default | Description |
 |---|---|---|
 | `frame_w` / `frame_h` | `640` / `480` | Webcam capture resolution |
+| `trackpad_margin` | `120` px | Inset of the virtual trackpad zone from frame edges |
 | `click_delay` | `0.35` s | Minimum time between consecutive clicks |
 | `min_detection_confidence` | `0.7` | MediaPipe detection threshold |
 | `min_tracking_confidence` | `0.7` | MediaPipe tracking threshold |

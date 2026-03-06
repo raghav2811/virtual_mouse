@@ -10,6 +10,8 @@ pyautogui.PAUSE = 0
 
 screen_w, screen_h = pyautogui.size()
 
+# ---------------- MEDIAPIPE ----------------
+
 mp_hands = mp.solutions.hands
 hands = mp_hands.Hands(
     max_num_hands=1,
@@ -19,12 +21,23 @@ hands = mp_hands.Hands(
 
 draw = mp.solutions.drawing_utils
 
+# ---------------- CAMERA ----------------
+
 cap = cv2.VideoCapture(0)
 
 frame_w = 640
 frame_h = 480
 
-# -------- Kalman Filter --------
+# ---------------- TRACKPAD AREA ----------------
+
+trackpad_margin = 120
+
+trackpad_x1 = trackpad_margin
+trackpad_y1 = trackpad_margin
+trackpad_x2 = frame_w - trackpad_margin
+trackpad_y2 = frame_h - trackpad_margin
+
+# ---------------- KALMAN FILTER ----------------
 
 kalman = cv2.KalmanFilter(4,2)
 
@@ -38,7 +51,7 @@ kalman.transitionMatrix = np.array([[1,0,1,0],
 
 kalman.processNoiseCov = np.eye(4,dtype=np.float32)*0.03
 
-# -------- Variables --------
+# ---------------- VARIABLES ----------------
 
 dragging = False
 scroll_prev_y = None
@@ -49,6 +62,8 @@ click_delay = 0.35
 prev_z = None
 
 
+# ---------------- UTILITIES ----------------
+
 def dist(p1,p2):
     return math.hypot(p2[0]-p1[0],p2[1]-p1[1])
 
@@ -58,6 +73,7 @@ def fingers_state(lm):
     tips=[4,8,12,16,20]
     fingers=[]
 
+    # thumb
     fingers.append(1 if lm[4].x > lm[3].x else 0)
 
     for i in range(1,5):
@@ -66,9 +82,12 @@ def fingers_state(lm):
     return fingers
 
 
+# ---------------- MAIN LOOP ----------------
+
 while True:
 
     success,frame=cap.read()
+
     if not success:
         break
 
@@ -78,6 +97,16 @@ while True:
     rgb=cv2.cvtColor(frame,cv2.COLOR_BGR2RGB)
 
     results=hands.process(rgb)
+
+    # draw virtual trackpad
+    cv2.rectangle(frame,
+                  (trackpad_x1,trackpad_y1),
+                  (trackpad_x2,trackpad_y2),
+                  (0,255,0),2)
+
+    cv2.putText(frame,"TRACKPAD",
+                (trackpad_x1,trackpad_y1-10),
+                cv2.FONT_HERSHEY_SIMPLEX,0.7,(0,255,0),2)
 
     if results.multi_hand_landmarks:
 
@@ -110,12 +139,22 @@ while True:
 
                 continue
 
+            # ignore movement outside trackpad
+            if not (trackpad_x1 < index[0] < trackpad_x2 and
+                    trackpad_y1 < index[1] < trackpad_y2):
+                continue
+
             # -------- POINTER --------
 
             if fingers[1]==1 and fingers[2]==0:
 
-                x=np.interp(index[0],(0,frame_w),(0,screen_w))
-                y=np.interp(index[1],(0,frame_h),(0,screen_h))
+                x=np.interp(index[0],
+                            (trackpad_x1,trackpad_x2),
+                            (0,screen_w))
+
+                y=np.interp(index[1],
+                            (trackpad_y1,trackpad_y2),
+                            (0,screen_h))
 
                 measurement=np.array([[np.float32(x)],
                                       [np.float32(y)]])
@@ -199,23 +238,22 @@ while True:
 
             prev_z=index_z
 
-           # -------- SCROLL --------
+            # -------- SCROLL --------
 
             if fingers[1]==1 and fingers[2]==1 and fingers[3]==0:
 
                 if scroll_prev_y is None:
                     scroll_prev_y=index[1]
 
-                delta = scroll_prev_y - index[1]
+                delta=scroll_prev_y-index[1]
 
-                # ignore small movements
-                if abs(delta) > 25:
+                if abs(delta)>25:
 
-                    scroll_amount = int(delta * 0.5)
+                    scroll_amount=int(delta*0.5)
 
                     pyautogui.scroll(scroll_amount)
 
-                    scroll_prev_y = index[1]
+                    scroll_prev_y=index[1]
 
                     cv2.putText(frame,"SCROLL",(20,240),
                                 cv2.FONT_HERSHEY_SIMPLEX,1,(255,255,0),2)
