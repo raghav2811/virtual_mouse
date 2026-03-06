@@ -18,9 +18,6 @@ cap = cv2.VideoCapture(0)
 
 screen_w, screen_h = pyautogui.size()
 
-gesture = "none"
-
-
 trackpad_x1 = TRACKPAD_MARGIN
 trackpad_y1 = TRACKPAD_MARGIN
 trackpad_x2 = FRAME_WIDTH - TRACKPAD_MARGIN
@@ -28,7 +25,6 @@ trackpad_y2 = FRAME_HEIGHT - TRACKPAD_MARGIN
 
 
 cv2.namedWindow("Vision Mouse", cv2.WINDOW_AUTOSIZE)
-cv2.setWindowProperty("Vision Mouse", cv2.WND_PROP_TOPMOST, 1)
 cv2.moveWindow("Vision Mouse", 20, 20)
 
 
@@ -40,7 +36,6 @@ while True:
         break
 
     frame = cv2.flip(frame, 1)
-
     frame = cv2.resize(frame, (FRAME_WIDTH, FRAME_HEIGHT))
 
     results = tracker.detect(frame)
@@ -55,65 +50,60 @@ while True:
 
             tracker.draw(frame, hand)
 
-            lm = hand.landmark
+            pts = [
+                (int(l.x * FRAME_WIDTH), int(l.y * FRAME_HEIGHT))
+                for l in hand.landmark
+            ]
 
-            pts = [(int(l.x * FRAME_WIDTH), int(l.y * FRAME_HEIGHT)) for l in lm]
+            gesture = engine.analyze(pts, hand.landmark)
 
-            gesture = engine.analyze(pts, lm)
+            # ---------- PAUSE ----------
+            if gesture == "pause":
+
+                mouse.drag_stop()
+                continue
 
             index = pts[8]
 
-            # -------- POINTER / DRAG MOVE --------
-
+            # ---------- POINTER / DRAG MOVE ----------
             if gesture in ["pointer", "pinch"]:
 
                 if (trackpad_x1 < index[0] < trackpad_x2 and
                     trackpad_y1 < index[1] < trackpad_y2):
 
-                    x = (index[0] - trackpad_x1) / (trackpad_x2 - trackpad_x1) * screen_w
-                    y = (index[1] - trackpad_y1) / (trackpad_y2 - trackpad_y1) * screen_h
+                    if gesture == "pinch" and not mouse.drag_ready():
+                        pass
+                    else:
 
-                    x, y = cursor.smooth(x, y)
+                        x = (index[0] - trackpad_x1) / (trackpad_x2 - trackpad_x1) * screen_w
+                        y = (index[1] - trackpad_y1) / (trackpad_y2 - trackpad_y1) * screen_h
 
-                    mouse.move(x, y)
+                        x, y = cursor.smooth(x, y)
 
-            # -------- DRAG --------
+                        mouse.move(x, y)
 
+            # ---------- DRAG ----------
             if gesture == "pinch":
-
                 mouse.drag_start()
-
             else:
-
                 mouse.drag_stop()
 
-            # -------- LEFT CLICK --------
-
+            # ---------- CLICKS ----------
             if gesture == "left_click":
-
                 mouse.left_click()
 
-            # -------- RIGHT CLICK --------
-
             if gesture == "right_click":
-
                 mouse.right_click()
 
-            # -------- DOUBLE CLICK --------
-
             if gesture == "double_click":
-
                 mouse.double_click()
 
-            # -------- SCROLL --------
-
+            # ---------- SCROLL ----------
             if gesture == "scroll_up":
-
-                mouse.scroll(30)
+                mouse.scroll(6)
 
             if gesture == "scroll_down":
-
-                mouse.scroll(-30)
+                mouse.scroll(-6)
 
     draw_hud(frame, gesture)
 
