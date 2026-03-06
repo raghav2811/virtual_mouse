@@ -9,10 +9,12 @@ Control your system mouse using only your hand and a webcam. Powered by **MediaP
 | Gesture | Action |
 |---|---|
 | Index finger up (only) | Move cursor |
-| Thumb pinches index finger | Left click / Drag |
+| Index finger curled/bent down | Left click |
+| Thumb pinches index finger | Drag (cursor moves while pinching) |
 | Thumb pinches middle finger | Double click |
 | Thumb pinches ring finger | Right click |
-| Index + middle fingers up | Scroll (move hand up/down) |
+| Index + middle fingers up, move up | Scroll up |
+| Index + middle fingers up, move down | Scroll down |
 | Closed fist | Pause tracking |
 
 - **Virtual trackpad zone** — green rectangle on screen bounds the active control area, mimicking a physical trackpad
@@ -81,11 +83,12 @@ hand mouse/
 ## How It Works
 
 1. **Hand detection** — `HandTracker` feeds each frame into MediaPipe Hands, which returns 21 3-D landmarks per hand.
-2. **Gesture recognition** — `GestureEngine.analyze()` reads finger states and pinch distances (scaled to palm size) to classify the current gesture.
-3. **Virtual trackpad** — Only index-finger positions inside the green rectangle are mapped to screen coordinates, providing a stable bounded control area.
-4. **Cursor smoothing** — Raw mapped coordinates are fed into a Kalman filter (`CursorFilter`) to remove jitter before moving the cursor.
-5. **Mouse actions** — `MouseController` translates gestures into PyAutoGUI calls (move, click, right-click, double-click, drag).
-6. **HUD** — `draw_hud()` renders the active gesture name on the frame so you can verify detection at a glance.
+2. **Gesture recognition** — `GestureEngine.analyze()` reads finger states and adaptive pinch distances (scaled to palm size) to classify gestures. Scroll direction (`scroll_up` / `scroll_down`) is determined by tracking index-finger vertical delta inside the engine.
+3. **Virtual trackpad** — Only index-finger positions inside the green rectangle are mapped to screen coordinates, providing a stable bounded control area. The cursor continues to move while dragging (pinch).
+4. **Left click via index bend** — Curling the index finger so its tip drops below its PIP joint triggers a left click, keeping pinch exclusively for drag.
+5. **Cursor smoothing** — Raw mapped coordinates are fed into a Kalman filter (`CursorFilter`) to remove jitter before moving the cursor.
+6. **Mouse actions** — `MouseController` translates gestures into PyAutoGUI calls (move, left-click, right-click, double-click, scroll, drag).
+7. **HUD** — `draw_hud()` renders the active gesture name on the frame so you can verify detection at a glance.
 
 ---
 
