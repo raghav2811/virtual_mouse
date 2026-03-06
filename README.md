@@ -1,264 +1,102 @@
-import cv2
-import mediapipe as mp
-import pyautogui
-import numpy as np
-import time
-import math
+# Hand Mouse — AI Virtual Mouse via Hand Gestures
 
-pyautogui.FAILSAFE = False
-pyautogui.PAUSE = 0
+Control your system mouse using only your hand and a webcam. Powered by **MediaPipe**, **OpenCV**, and **PyAutoGUI**, the project detects hand landmarks in real time to move the cursor, click, scroll, and drag — no physical mouse required.
 
-screen_w, screen_h = pyautogui.size()
+---
 
-mp_hands = mp.solutions.hands
-hands = mp_hands.Hands(
-    max_num_hands=2,
-    min_detection_confidence=0.7,
-    min_tracking_confidence=0.7
-)
+## Features
 
-draw = mp.solutions.drawing_utils
+| Gesture | Action |
+|---|---|
+| Index finger up (only) | Move cursor |
+| Thumb pinches index finger | Left click / Drag |
+| Thumb pinches middle finger | Double click |
+| Thumb pinches ring finger | Right click |
+| Index + middle fingers up | Scroll (move hand up/down) |
+| Closed fist | Pause tracking |
 
-cap = cv2.VideoCapture(0)
+- **Virtual trackpad zone** — green rectangle on screen bounds the active control area, mimicking a physical trackpad
+- **Adaptive pinch threshold** — pinch distance scales with palm size for reliable detection at any distance from the camera
+- **Kalman filter** smoothing for stable, jitter-free cursor movement
+- **On-screen HUD** showing the currently detected gesture in real time
+- Supports up to **2 hands** detected simultaneously
+- Configurable click and scroll delays to prevent accidental inputs
+- Mirrored webcam feed for intuitive control
 
-frame_w = 640
-frame_h = 480
+---
 
-# ---------- TRACKPAD ----------
+## Requirements
 
-trackpad_margin = 120
-trackpad_x1 = trackpad_margin
-trackpad_y1 = trackpad_margin
-trackpad_x2 = frame_w - trackpad_margin
-trackpad_y2 = frame_h - trackpad_margin
+- Python 3.8+
+- Webcam
 
-# ---------- KALMAN FILTER ----------
+### Python dependencies
 
-kalman = cv2.KalmanFilter(4,2)
+```
+opencv-python
+mediapipe
+pyautogui
+numpy
+```
 
-kalman.measurementMatrix = np.array([[1,0,0,0],
-                                     [0,1,0,0]],np.float32)
+Install with:
 
-kalman.transitionMatrix = np.array([[1,0,1,0],
-                                    [0,1,0,1],
-                                    [0,0,1,0],
-                                    [0,0,0,1]],np.float32)
+```bash
+pip install opencv-python mediapipe pyautogui numpy
+```
 
-kalman.processNoiseCov = np.eye(4,dtype=np.float32)*0.03
+---
 
-# ---------- STATE VARIABLES ----------
+## Usage
 
-dragging = False
-scroll_prev_y = None
-last_click = 0
-click_delay = 0.35
-last_scroll = 0
-scroll_delay = 0.08
-prev_z = None
+```bash
+python main.py
+```
 
-gesture_name = "None"
+- A window titled **"Vision Mouse"** opens showing the webcam feed with hand landmarks and the green trackpad zone drawn.
+- Move your index finger inside the green zone to control the cursor.
+- Use the gestures from the table above to click, scroll, and drag.
+- Press **Esc** to quit.
 
+---
 
-def dist(p1,p2):
-    return math.hypot(p2[0]-p1[0],p2[1]-p1[1])
+## Project Structure
 
+```
+hand mouse/
+├── main.py             # Entry point — main loop, orchestrates all modules
+├── config.py           # Global constants (resolution, delays, thresholds)
+├── hand_tracker.py     # MediaPipe hand detection and landmark drawing
+├── gesture_engine.py   # Finger/gesture recognition logic
+├── cursor_filter.py    # Kalman filter smoothing for cursor position
+├── mouse_controller.py # PyAutoGUI mouse actions (move, click, drag)
+├── ui_overlay.py       # Trackpad rectangle and HUD rendering
+├── utils.py            # Shared helpers (dist, fingers_state)
+└── README.md
+```
 
-def fingers_state(lm):
+---
 
-    tips=[4,8,12,16,20]
-    fingers=[]
+## How It Works
 
-    fingers.append(1 if lm[4].x > lm[3].x else 0)
+1. **Hand detection** — `HandTracker` feeds each frame into MediaPipe Hands, which returns 21 3-D landmarks per hand.
+2. **Gesture recognition** — `GestureEngine.analyze()` reads finger states and pinch distances (scaled to palm size) to classify the current gesture.
+3. **Virtual trackpad** — Only index-finger positions inside the green rectangle are mapped to screen coordinates, providing a stable bounded control area.
+4. **Cursor smoothing** — Raw mapped coordinates are fed into a Kalman filter (`CursorFilter`) to remove jitter before moving the cursor.
+5. **Mouse actions** — `MouseController` translates gestures into PyAutoGUI calls (move, click, right-click, double-click, drag).
+6. **HUD** — `draw_hud()` renders the active gesture name on the frame so you can verify detection at a glance.
 
-    for i in range(1,5):
-        fingers.append(1 if lm[tips[i]].y < lm[tips[i]-2].y else 0)
+---
 
-    return fingers
+## Configuration
 
+All tuneable constants live in `config.py`:
 
-while True:
-
-    success,frame = cap.read()
-    if not success:
-        break
-
-    frame = cv2.flip(frame,1)
-    frame = cv2.resize(frame,(frame_w,frame_h))
-
-    rgb = cv2.cvtColor(frame,cv2.COLOR_BGR2RGB)
-
-    results = hands.process(rgb)
-
-    # draw trackpad
-    cv2.rectangle(frame,(trackpad_x1,trackpad_y1),
-                  (trackpad_x2,trackpad_y2),(0,255,0),2)
-
-    if results.multi_hand_landmarks:
-
-        for hand in results.multi_hand_landmarks:
-
-            draw.draw_landmarks(frame,hand,mp_hands.HAND_CONNECTIONS)
-
-            lm = hand.landmark
-
-            pts=[(int(l.x*frame_w),int(l.y*frame_h)) for l in lm]
-
-            thumb=pts[4]
-            index=pts[8]
-            middle=pts[12]
-            ring=pts[16]
-
-            index_z = lm[8].z
-
-            fingers=fingers_state(lm)
-
-            # adaptive pinch
-            palm_size = dist(pts[0], pts[9])
-            pinch_threshold = palm_size * 0.4
-
-            # ---------- CLOSED FIST ----------
-
-            if sum(fingers)==0:
-
-                gesture_name="Paused"
-
-                dragging=False
-                pyautogui.mouseUp()
-                continue
-
-            # ---------- SCROLL ----------
-
-            if fingers[1]==1 and fingers[2]==1 and fingers[3]==0:
-
-                gesture_name="Scroll"
-
-                if scroll_prev_y is None:
-                    scroll_prev_y=index[1]
-
-                delta=scroll_prev_y-index[1]
-
-                if abs(delta)>20:
-
-                    if time.time()-last_scroll > scroll_delay:
-
-                        pyautogui.scroll(int(delta*0.4))
-
-                        scroll_prev_y=index[1]
-                        last_scroll=time.time()
-
-                continue
-
-            else:
-                scroll_prev_y=None
-
-            # ---------- TRACKPAD LIMIT ----------
-
-            if not (trackpad_x1 < index[0] < trackpad_x2 and
-                    trackpad_y1 < index[1] < trackpad_y2):
-                continue
-
-            # ---------- POINTER ----------
-
-            if fingers[1]==1 and fingers[2]==0:
-
-                x=np.interp(index[0],
-                            (trackpad_x1,trackpad_x2),
-                            (0,screen_w))
-
-                y=np.interp(index[1],
-                            (trackpad_y1,trackpad_y2),
-                            (0,screen_h))
-
-                measurement=np.array([[np.float32(x)],
-                                      [np.float32(y)]])
-
-                kalman.correct(measurement)
-                prediction=kalman.predict()
-
-                smooth_x=int(prediction[0][0])
-                smooth_y=int(prediction[1][0])
-
-                pyautogui.moveTo(smooth_x,smooth_y)
-
-                gesture_name="Pointer"
-
-            # ---------- DRAG ----------
-
-            if dist(thumb,index) < pinch_threshold:
-
-                if not dragging:
-
-                    pyautogui.mouseDown()
-                    dragging=True
-                    gesture_name="Dragging"
-
-            else:
-
-                if dragging:
-
-                    pyautogui.mouseUp()
-                    dragging=False
-
-            # ---------- LEFT CLICK ----------
-
-            if dist(thumb,index) < pinch_threshold and fingers[2]==0:
-
-                if time.time()-last_click > click_delay:
-
-                    pyautogui.click()
-                    last_click=time.time()
-                    gesture_name="Left Click"
-
-            # ---------- RIGHT CLICK ----------
-
-            if dist(thumb,ring) < pinch_threshold:
-
-                if time.time()-last_click > click_delay:
-
-                    pyautogui.rightClick()
-                    last_click=time.time()
-                    gesture_name="Right Click"
-
-            # ---------- DOUBLE CLICK ----------
-
-            if dist(thumb,middle) < pinch_threshold and fingers[1]==0:
-
-                if time.time()-last_click > click_delay:
-
-                    pyautogui.doubleClick()
-                    last_click=time.time()
-                    gesture_name="Double Click"
-
-            # ---------- DEPTH CLICK ----------
-
-            if prev_z is not None:
-
-                if prev_z - index_z > 0.05:
-
-                    if time.time()-last_click > click_delay:
-
-                        pyautogui.click()
-                        last_click=time.time()
-                        gesture_name="Depth Click"
-
-            prev_z=index_z
-
-    # ---------- HUD ----------
-
-    cv2.rectangle(frame,(10,10),(300,60),(0,0,0),-1)
-
-    cv2.putText(frame,
-                "Gesture: "+gesture_name,
-                (20,45),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.8,
-                (0,255,255),
-                2)
-
-    cv2.imshow("AI Virtual Mouse",frame)
-
-    if cv2.waitKey(1)==27:
-        break
-
-cap.release()
-cv2.destroyAllWindows()
+| Constant | Default | Description |
+|---|---|---|
+| `FRAME_WIDTH` / `FRAME_HEIGHT` | `640` / `480` | Webcam capture resolution |
+| `TRACKPAD_MARGIN` | `120` px | Inset of the virtual trackpad zone from frame edges |
+| `CLICK_DELAY` | `0.35` s | Minimum time between consecutive clicks |
+| `SCROLL_DELAY` | `0.08` s | Minimum time between scroll events |
+| `SCROLL_THRESHOLD` | `20` px | Minimum hand movement to trigger a scroll |
+| `SCROLL_MULTIPLIER` | `0.4` | Scroll speed multiplier |
